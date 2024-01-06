@@ -280,16 +280,16 @@ def run_pid_warmstart(track, model, t=0, approx=True):
 
     x_ref = ego_sim_state.ey
 
-    dt =  model.dt
+    ds =  model.ds
     pid_steer_params = PIDParams()
-    pid_steer_params.dt = dt
+    pid_steer_params.ds = ds
     pid_steer_params.default_steer_params()
     pid_steer_params.Kp = 1
     pid_speed_params = PIDParams()
-    pid_speed_params.dt = dt
+    pid_speed_params.ds = ds
     pid_speed_params.default_speed_params()
 
-    pid_controller = PIDLaneFollower(ego_sim_state.v, x_ref, dt, pid_steer_params, pid_speed_params)
+    pid_controller = PIDLaneFollower(ego_sim_state.v, x_ref, ds, pid_steer_params, pid_speed_params)
     egost_list = [model.vehicle_state.initialize()]
 
     n_iter = 0.0
@@ -312,8 +312,8 @@ def run_pid_warmstart(track, model, t=0, approx=True):
         egost_list.append(ego_sim_state.initialize())
 
         n_iter += 1
-        t += dt
-        s_prev = q[3]
+        t += ds
+        s_prev = q[2]
         # print(n_iter)
         
 

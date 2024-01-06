@@ -21,7 +21,7 @@ class Track():
         self.inner = inner
         self.outer = outer
         self.center = center
-        
+                        
         self.x = center[:,0]
         self.y = center[:,1]
         self.v = center[:,2]
@@ -42,31 +42,67 @@ class Track():
         self.psi = np.arctan2(dy,dx)
         self.s = np.cumsum(ds)
         self.track_length = np.sum(ds)
-
+    ##################3
+    def find_nearest_point(self, x, y,):
+        min_dist = np.inf
+        nearest_index = -1 
+        for i in range(len(self.x)):
+            dist = np.sqrt((self.x[i]-x)**2 + (self.y[i]-y)**2)
+            if dist < min_dist:
+                min_dist = dist
+                nearest_index = i
+        return nearest_index
     
-    def get_curvature_casadi_fn(self):
-        sym_s = ca.SX.sym('s', 1)
+    def get_curvature_at_position(self, x, y):
+        index = self.find_nearest_point(x,y)
+        return self.curv[index] if index != -1 else 0
+            
+    # def get_curvature_casadi_fn(self):
+    #     sym_x = ca.SX.sym('x')
+    #     sym_y = ca.SX.sym('y')
+        
+    #     curvature_value = self.get_curvature_at_position(sym_x, sym_y)
+    #     return ca.Function('track_curvature', [sym_x, sym_y], [curvature_value])
 
-        # Makes sure s is within [0, track_length]
-        sym_s_bar = ca.mod(ca.mod(sym_s, self.track_length) + self.track_length, self.track_length)
-        pw_const_curvature = ca.pw_const(sym_s_bar, self.s[1:-1], self.curv[1:])
-        return ca.Function('track_curvature', [sym_s], [pw_const_curvature])
+    # def get_boundary_at_position(self, x, y, boundary):
+    #     """
+    #     주어진 x, y 좌표에서의 트랙의 경계(왼쪽 또는 오른쪽) 값을 반환합니다.
+    #     """
+    #     index = self.find_nearest_point(x, y)
+    #     return boundary[index] if index != -1 else 0
+
+    # # get_left_bd_casadi_fn 메서드를 수정:
+    # def get_left_bd_casadi_fn(self):
+    #     sym_x = ca.SX.sym('x')
+    #     sym_y = ca.SX.sym('y')
+
+    #     left_bd_value = self.get_boundary_at_position(sym_x, sym_y, self.left_bd)
+    #     return ca.Function('track_left_boundary', [sym_x, sym_y], [left_bd_value])
+
+    # # get_right_bd_casadi_fn 메서드를 수정:
+    # def get_right_bd_casadi_fn(self):
+    #     sym_x = ca.SX.sym('x')
+    #     sym_y = ca.SX.sym('y')
+
+    #     right_bd_value = self.get_boundary_at_position(sym_x, sym_y, self.right_bd)
+    #     return ca.Function('track_right_boundary', [sym_x, sym_y], [right_bd_value])
+    ###########################3
     
-    def get_left_bd_casadi_fn(self):
-        sym_s = ca.SX.sym('s', 1)
+    # def get_left_bd_casadi_fn(self):
+    #     sym_s = ca.SX.sym('s', 1)
 
-        # Makes sure s is within [0, track_length]
-        sym_s_bar = ca.mod(ca.mod(sym_s, self.track_length) + self.track_length, self.track_length)
-        pw_const_left_bd = ca.pw_const(sym_s_bar, self.s[1:-1], self.left_bd[1:])
-        return ca.Function('track_curvature', [sym_s], [pw_const_left_bd])
+    #     # Makes sure s is within [0, track_length]
+    #     sym_s_bar = ca.mod(ca.mod(sym_s, self.track_length) + self.track_length, self.track_length)
+    #     pw_const_left_bd = ca.pw_const(sym_s_bar, self.s[1:-1], self.left_bd[1:])
+    #     return ca.Function('track_curvature', [sym_s], [pw_const_left_bd])
     
-    def get_right_bd_casadi_fn(self):
-        sym_s = ca.SX.sym('s', 1)
+    # def get_right_bd_casadi_fn(self):
+    #     sym_s = ca.SX.sym('s', 1)
 
-        # Makes sure s is within [0, track_length]
-        sym_s_bar = ca.mod(ca.mod(sym_s, self.track_length) + self.track_length, self.track_length)
-        pw_const_right_bd = ca.pw_const(sym_s_bar, self.s[1:-1], self.right_bd[1:])
-        return ca.Function('track_curvature', [sym_s], [pw_const_right_bd])
+    #     # Makes sure s is within [0, track_length]
+    #     sym_s_bar = ca.mod(ca.mod(sym_s, self.track_length) + self.track_length, self.track_length)
+    #     pw_const_right_bd = ca.pw_const(sym_s_bar, self.s[1:-1], self.right_bd[1:])
+    #     return ca.Function('track_curvature', [sym_s], [pw_const_right_bd])
 
 
 
@@ -146,7 +182,7 @@ class Track():
 
         pos_cur = np.array([x, y])
         cl_coord = None
-
+        print(cl_coord)
         for i in range(len(self.s)-1):
             x_s = self.x[i]
             y_s = self.y[i]

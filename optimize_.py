@@ -10,12 +10,12 @@ import matplotlib.pyplot as plt
 
 @dataclass
 class ModelParams():
-    n: int = field(default=4) # dimension state space
+    n: int = field(default=3) # dimension state space
     d: int = field(default=2) # dimension input space
 
     N: int = field(default=50)
 
-    Qs: float = field(default=20.0)
+    #Qs: float = field(default=20.0)
     Qey: float = field(default=80.0)
     Qv: float = field(default=80.0)
     Qepsi: float = field(default=80.0)
@@ -24,8 +24,8 @@ class ModelParams():
     R_delta: float = field(default=0.01)
 
     # named constraint
-    s_max: float = field(default=np.inf)
-    s_min: float = field(default=-np.inf)
+    #s_max: float = field(default=np.inf)
+    #s_min: float = field(default=-np.inf)
     ey_max: float = field(default=np.inf)
     ey_min: float = field(default=-np.inf)
     e_psi_max: float = field(default=np.pi)
@@ -72,13 +72,11 @@ class ModelParams():
         self.vectorize_constraints()
 
     def vectorize_constraints(self):
-        self.state_ub = np.array([self.s_max,
-                                  self.ey_max,
+        self.state_ub = np.array([self.ey_max,
                                   self.e_psi_max,
                                   self.v_max])
 
-        self.state_lb = np.array([self.s_min,
-                                  self.ey_min,
+        self.state_lb = np.array([self.ey_min,
                                   self.e_psi_min,
                                   self.v_min])
 
@@ -95,7 +93,7 @@ opt_params = ModelParams(
     optlevel=2,
     N= 70,
 
-    Qs= 1, 
+    #Qs= 1, 
     Qey= 1,
     Qv = 1,
     Qepsi= 5, #vy
@@ -134,7 +132,7 @@ class Optimize():
         self.dynamics = dynamics
         self.lencar = dynamics.L  
 
-        self.dt = dynamics.dt
+        self.ds = dynamics.ds
         self.Nx = dynamics.n_q # number of states
         self.Nu = dynamics.n_u # number of inputs
         self.N = dynamics.N
@@ -142,14 +140,14 @@ class Optimize():
 
         # optimization params
         self.control_params = control_params
-        self.Ts = self.dt
+        #self.Ts = self.dt
         self.Ss = self.track_length / self.N
         self.ds = self.track_length / self.N
-        self.S = ca.SX.sym('S')
+        
         # self.T = ca.SX.sym('T')
         # self.dt = self.T/self.N
 
-        self.Qs = ca.SX(control_params.Qs)
+        #self.Qs = ca.SX(control_params.Qs)
         self.Qey = ca.SX(control_params.Qey)
         self.Qv = ca.SX(control_params.Qv)
         self.Qepsi = ca.SX(control_params.Qepsi)
@@ -175,7 +173,8 @@ class Optimize():
         Define Variables for optimization
         '''
 
-        self.X = ca.SX.sym('X', (self.N + 1)*self.Nx)
+        # self.X = ca.SX.sym('X', (self.N + 1)*self.Nx)
+        self.X = ca.SX.sym('X', self.N*self.Nx) #  s 제외
         self.U = ca.SX.sym('U', self.N*self.Nu)
         
 
@@ -196,8 +195,8 @@ class Optimize():
         print(x0)
         ## Cost 
         for t in range(self.N):
-            delta_s = ca.fabs(self.X[self.Nx*(t+1)] - self.X[self.Nx*t])
-            self.cost -= delta_s * self.Qs / (self.X[self.Nx*t+3] * ca.cos(self.X[self.Nx*t+2]) + 0.1 / (1 - self.X[self.Nx*t+1] * self.dynamics.sym_c))
+            estimated_distance = self.X[self.Nx*t+2]*self.ds
+            self.cost += estimated_distance * self.Qv
             #self.cost += self.dt
             # self.cost += ca.if_else(self.X[self.Nx*t]>self.track_length, 0, self.dt)
             # self.cost -= self.Qs*(self.X[self.Nx*(t+1)] - self.X[self.Nx*t])
@@ -208,15 +207,15 @@ class Optimize():
             #self.cost += self.X[self.Nx*t+2].T*self.Qepsi*self.X[self.Nx*t+2]
 
 
-            if t < self.N-1:
-                # v_bar = self.X[self.Nx*(t+1)+3] - self.X[self.Nx*t+3] 
-                u_bar = self.U[self.Nu*(t+1):self.Nu*(t+2)] - self.U[self.Nu*t:self.Nu*(t+1)]
-                # u_bar = self.U[self.Nu*t:self.Nu*(t+1)]
+            # if t < self.N-1:
+            #     # v_bar = self.X[self.Nx*(t+1)+3] - self.X[self.Nx*t+3] 
+            #     u_bar = self.U[self.Nu*(t+1):self.Nu*(t+2)] - self.U[self.Nu*t:self.Nu*(t+1)]
+            #     # u_bar = self.U[self.Nu*t:self.Nu*(t+1)]
 
-                self.cost += u_bar[0]*self.R_a*u_bar[0]
-                self.cost += u_bar[1]*self.R_delta*u_bar[1]
+            #     self.cost += u_bar[0]*self.R_a*u_bar[0]
+            #     self.cost += u_bar[1]*self.R_delta*u_bar[1]
 
-
+        self.const=[]
         ## Constraint for dynamics
         for t in range(self.N):
             current_x = self.X[self.Nx*t:self.Nx*(t+1)]
@@ -224,22 +223,25 @@ class Optimize():
 
             integrated = self.dynamics.f_d_rk4(current_x, current_u, self.ds)
             # integrated = self.dynamics.update(current_x, current_u)
-            self.const = ca.vertcat(self.const, self.X[self.Nx*(t+1):self.Nx*(t+2)]-integrated)
+            self.const = ca.vertcat(self.const, self.X[self.Nx*(t):self.Nx*(t+1)]-integrated)
         ####
         # initial_s_position = x0[0]
         # final_s_position = self.X[self.Nx*self.N]
         # lap_completion_constraint = ca.fabs(final_s_position-(initial_s_position+self.track_length))-lap_completion_constraint
         # self.const = ca.vertact(self.const, lap_completion_constraint)
-        self.const = ca.vertcat(self.const, self.track_length-self.X[self.Nx*self.N])
-
+        #self.const = ca.vertcat(self.const, self.X[self.Nx*self.N])
+        print(self.const.size1())
         ## Constraint for state (upper bound and lower bound)
         self.lbx = [0] 
-        self.ubx = [0] 
+        self.ubx = [100]
+        #self.lbx +=list(x0)
+        #self.ubx +=list(x0) # what is it?
         
          
         for t in range(self.N):
             self.lbx += list(self.state_lb)
             self.ubx += list(self.state_ub) 
+
 
 
            
@@ -261,8 +263,8 @@ class Optimize():
         self.ubx +=  list(self.input_ub)*self.N
         self.lbx +=  list(self.input_lb)*self.N
 
-        self.lbg_dyanmics = [0]*(self.Nx*self.N) 
-        self.ubg_dyanmics = [0]*(self.Nx*self.N) 
+        self.lbg_dyanmics = [0]*(self.Nx*self.N)+[0]
+        self.ubg_dyanmics = [0]*(self.Nx*self.N)+[100]
 
         total_variable = self.X.size1() + self.U.size1()
         print(self.X.size1(), self.X.size2(), self.U.size1(), self.U.size2())
@@ -285,13 +287,16 @@ class Optimize():
             warnings.warn('Initial guess of open loop input sequence not provided, using zeros')
             self.u_ws = np.zeros((self.N, self.d))
 
-        s_init = self.Ss*self.N
-        x_ws = np.zeros((self.N+1, self.Nx))
-        x_ws[0] = x0
-        x_ws[1:] = self.x_ws
+        #s_init = self.Ss*self.N
+        # x_ws = np.zeros((self.N+1, self.Nx))
+        # x_ws[0] = x0
+        # x_ws[1:] = self.x_ws
+        x_ws = np.zeros((self.N, self.Nx))
+        x_ws = self.x_ws
+        
         u_ws = np.concatenate(self.u_ws)
-        x_init = ca.vertcat(s_init,np.concatenate(x_ws))
-        x_init = ca.vertcat(x_init, u_ws)
+        #x_init = ca.vertcat(s_init,np.concatenate(x_ws))
+        x_init = ca.vertcat(np.concatenate(x_ws), u_ws)
 
         sol = self.solver(x0=x_init, lbx = self.lbx, ubx=self.ubx, lbg=self.lbg_dyanmics,ubg=self.ubg_dyanmics)
 
@@ -300,6 +305,7 @@ class Optimize():
 
         opt_time = x[0]
         print("optimal_time:", x[0])
+        print(x)
         idx = 1+(self.N+1)*self.Nx
         for i in range(0,self.N):
             self.u_pred[i, 0] = x[idx+self.Nu*i].__float__()
@@ -309,7 +315,7 @@ class Optimize():
             self.x_pred[i, 0] = x[1+self.Nx*i].__float__()
             self.x_pred[i, 1] = x[1+self.Nx*i + 1].__float__()
             self.x_pred[i, 2] = x[1+self.Nx*i + 2].__float__()
-            self.x_pred[i, 3] = x[1+self.Nx*i + 3].__float__()
+            #self.x_pred[i, 3] = x[1+self.Nx*i + 3].__float__()
 
         # for i in range(0,self.N-1):
         #     s_next = x[1+self.Nx*(i+1)].__float__()
