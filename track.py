@@ -146,7 +146,6 @@ class Track():
 
         pos_cur = np.array([x, y])
         cl_coord = None
-
         for i in range(len(self.s)-1):
             x_s = self.x[i]
             y_s = self.y[i]

@@ -181,7 +181,6 @@ class Optimize():
         self.cost = 0.0
         self.const = []
 
-
     def solve_optimization(self, state):
 
         x0, _ = self.dynamics.state2qu(state)

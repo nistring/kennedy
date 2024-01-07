@@ -1,6 +1,5 @@
 from dataclasses import dataclass, field
 import numpy as np
-
 import casadi as ca
 from utils import *
 import copy
