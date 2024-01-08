@@ -1,6 +1,5 @@
 from dataclasses import dataclass, field
 import numpy as np
-from track import *
 import casadi as ca
 from utils import *
 import copy
@@ -35,22 +34,17 @@ class VehicleActuation(PythonMsg):
 
 
 class KinematicBicycle():
-    def __init__(self, track, ds= None, N=70):
+    def __init__(self, track, dt=0.1, N=70):
 
         self.track = track
-        self.N = N
-        
+
         jac_opts = dict(enable_fd=False, enable_jacobian=False, enable_forward=False, enable_reverse=False)
         self.options = lambda fn_name: dict(jit=False, **jac_opts)
-        if ds is None:
-            self.ds = track.track_length / self.N 
-        else:
-            self.ds = ds
-        
+        self.dt = dt
         self.t0 = 0.0
         self.M = 1 # RK4 integration steps
-        self.h = self.ds/self.M
-        
+        self.h = self.dt/self.M
+        self.N = N
 
  
         self.vehicle_state = VehicleState()
@@ -65,7 +59,7 @@ class KinematicBicycle():
             u = [a, delta] longitudinal acceleration, steering angle'''
 
         # Number of states and input
-        self.n_q = 3 #s,ey,epsi,v
+        self.n_q = 4 #s,ey,epsi,v
         self.n_u = 2 #a,delta
 
         # Model Prameter
@@ -73,22 +67,20 @@ class KinematicBicycle():
         self.L_f = 0.17 #wheel_dist_front
         self.L_r = 0.17 #wheel_dist_rear
 
-        #self.sym_s = ca.SX.sym('s')
+        self.sym_s = ca.SX.sym('s')
         self.sym_ey = ca.SX.sym('ey')
         self.sym_epsi = ca.SX.sym('epsi')
         self.sym_v = ca.SX.sym('v')
 
         # Track parameters
         self.track_length = ca.SX.sym('track_length')
-        #self.get_curvature = self.track.get_curvature_casadi_fn()
-        #self.sym_c = self.get_curvature(self.sym_s)
-        x= track.x[0]
-        y= track.y[0]
-        self.sym_c = self.track.get_curvature_at_position(x,y)
-        #self.get_left_bd = self.track.get_left_bd_casadi_fn()
-        #self.sym_left_bd = self.get_left_bd(self.sym_s)
-        #self.get_right_bd = self.track.get_right_bd_casadi_fn()
-        #self.sym_right_bd = self.get_right_bd(self.sym_s)
+        self.get_curvature = self.track.get_curvature_casadi_fn()
+        self.sym_c = self.get_curvature(self.sym_s)
+
+        self.get_left_bd = self.track.get_left_bd_casadi_fn()
+        self.sym_left_bd = self.get_left_bd(self.sym_s)
+        self.get_right_bd = self.track.get_right_bd_casadi_fn()
+        self.sym_right_bd = self.get_right_bd(self.sym_s)
 
         self.sym_u_a = ca.SX.sym('a')
         self.sym_u_s = ca.SX.sym('delta')
@@ -99,27 +91,21 @@ class KinematicBicycle():
     def initialize_model(self):
        
         # time derivatives
-        # self.sym_ds = self.sym_v * ca.cos(self.sym_epsi) / (1 - self.sym_ey * self.sym_c)
-        # self.sym_dey = self.sym_v * ca.sin(self.sym_epsi)
-        # self.sym_depsi = self.sym_v*ca.tan(self.sym_u_s)/(self.L) - self.sym_ds*self.sym_c
-        # self.sym_dv = self.sym_u_a - self.sym_v*self.sym_c
+        self.sym_ds = self.sym_v * ca.cos(self.sym_epsi) / (1 - self.sym_ey * self.sym_c)
+        self.sym_dey = self.sym_v * ca.sin(self.sym_epsi)
+        self.sym_depsi = self.sym_v*ca.tan(self.sym_u_s)/(self.L) - self.sym_ds*self.sym_c
+        self.sym_dv = self.sym_u_a - self.sym_v*self.sym_c
         
         # self.sym_ds = self.sym_v * ca.cos(self.sym_epsi)
         # self.sym_dey = self.sym_v * ca.sin(self.sym_epsi)
         # self.sym_depsi = self.sym_v*ca.tan(self.sym_u_s)/(self.L_f + self.L_r)
         # self.sym_dv = self.sym_u_a - self.sym_v*self.sym_c*self.sym_depsi
        
-        ds_dt = self.sym_v * ca.cos(self.sym_epsi)+0.1  / (1 - self.sym_ey * self.sym_c)
 
-        # State derivatives with respect to S
-        self.sym_ds = 1
-        self.sym_dey = (self.sym_v * ca.sin(self.sym_epsi)) / ds_dt
-        self.sym_depsi = (self.sym_v * ca.tan(self.sym_u_s) / self.L - self.sym_ds * self.sym_c) / ds_dt
-        self.sym_dv = (self.sym_u_a - self.sym_v * self.sym_c) / ds_dt
         # state and state derivative functions
-        self.sym_q = ca.vertcat(self.sym_ey, self.sym_epsi, self.sym_v)
+        self.sym_q = ca.vertcat(self.sym_s, self.sym_ey, self.sym_epsi, self.sym_v)
         self.sym_u = ca.vertcat(self.sym_u_a, self.sym_u_s)
-        self.sym_dq = ca.vertcat(self.sym_dey, self.sym_depsi, self.sym_dv)
+        self.sym_dq = ca.vertcat(self.sym_ds, self.sym_dey, self.sym_depsi, self.sym_dv)
 
         self.precompute_model()
 
@@ -148,8 +134,8 @@ class KinematicBicycle():
         self.fC = ca.Function('fC', dyn_inputs, [self.sym_Cc], self.options('fC'))
 
         # Discretization with euler
-        # sym_q_kp1 = self.sym_q + self.dt * self.fc(*dyn_inputs)
-        sym_q_kp1 = self.f_d_rk4(*dyn_inputs, self.ds)
+        sym_q_kp1 = self.sym_q + self.sym_ds * self.fc(*dyn_inputs) / (self.sym_v + 1e-6)
+        # sym_q_kp1 = self.f_d_rk4(*dyn_inputs, self.dt)
         
         # Discrete time dynamics function
         self.fd = ca.Function('fd', dyn_inputs, [sym_q_kp1], self.options('fd'))
@@ -185,12 +171,12 @@ class KinematicBicycle():
     #         x_p += self.h * (a1 + 2 * a2 + 2 * a3 + a4) / 6
     #     return x_p
     
-    def f_d_rk4(self, x, u, ds):
+    def f_d_rk4(self, x, u, dt):
         '''
         Discrete nonlinear dynamics (RK4 approx.)
         '''
         x_p = x
-        h = ds/self.M
+        h = dt/self.M
         for i in range(self.M):
             a1 = self.fc(x_p, u)
             a2 = self.fc(x_p + (h / 2) * a1, u)
@@ -204,31 +190,25 @@ class KinematicBicycle():
 
     def update(self, q, u):
         curv = self.get_curvature(q[0])
-        #s_new = q[0] + q[3]*np.cos(q[2])*self.dt/(1-q[1]*curv)
-        ey_new = q[0] + q[2]*np.sin(q[1])*self.ds
-        epsi_new = q[1] + q[2]*ca.tan(u[1])/(self.L_f + self.L_r) - q[2]*np.cos(q[1])*curv*q[2]/(1-q[0]*curv)
-        v_new = q[2] + u[0]*self.ds
+        s_new = q[0] + q[3]*np.cos(q[2])*self.dt/(1-q[1]*curv)
+        ey_new = q[1] + q[3]*np.sin(q[2])*self.dt
+        epsi_new = q[2] + q[3]*ca.tan(u[1])/(self.L_f + self.L_r) - q[3]*np.cos(q[2])*curv*q[3]/(1-q[1]*curv)
+        v_new = q[3] + u[0]*self.dt
 
-        return np.array([ey_new, epsi_new, v_new])
+        return np.array([s_new, ey_new, epsi_new, v_new])
 
-    def update_curvature(self, x, y):
-        self.sym_c = self.track.get_curvature_at_position(x,y)
 
     def step(self, state):
          
         q, u = self.state2qu(state)  
 
-        x = state.x
-        y = state.y
-        self.update_curvature(x,y)
-        print("state x,y:",x,y)
         #Update time
-        #t = state.t - self.t0
-        #tf = state.t + self.t0
-        #state.t = tf + self.t0
+        t = state.t - self.t0
+        tf = state.t + self.t0
+        state.t = tf + self.t0
 
         # q_new = self.update(q,u)
-        q_new = np.array(self.f_d_rk4(q, u, self.ds))[:,0]
+        q_new = np.array(self.f_d_rk4(q, u, self.dt))[:,0]
 
         self.qu2state(state, q_new, u)  
         self.track.local_to_global_typed(state)
@@ -236,10 +216,10 @@ class KinematicBicycle():
 
     def qu2state(self, state: VehicleState, q: np.ndarray = None, u: np.ndarray = None):
         if q is not None:
-            #state.s = q[0]
-            state.ey = q[0]
-            state.epsi = q[1]
-            state.v = q[2]
+            state.s = q[0]
+            state.ey = q[1]
+            state.epsi = q[2]
+            state.v = q[3]
 
         if u is not None:
             state.a = u[0]
@@ -253,6 +233,6 @@ class KinematicBicycle():
 
 
     def state2qu(self, state):
-        q = np.array([state.ey, state.epsi, state.v])
+        q = np.array([state.s, state.ey, state.epsi, state.v])
         u = np.array([state.a, state.delta])
         return q, u

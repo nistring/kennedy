@@ -15,7 +15,7 @@ from optimize_ import *
 ''' Initialize the environment '''
 
 ## Set the directory
-dir = os.path.expanduser('~') + '/Downloads/Track_Optimization/'
+dir = './'# os.path.expanduser('~') + '/Desktop/IterativeTrackOptimization/'
 center_dir = dir + 'track/center_traj_with_boundary.txt' 
 inner_dir = dir + 'track/innerwall.txt'
 outer_dir = dir + 'track/outerwall.txt'
@@ -32,19 +32,9 @@ for i in range(0,Nsim):
     new_center = center[idx:]
     new_center = np.concatenate((new_center,center[:idx]),axis=0)
     track = Track(new_center,inner,outer)
-    model = KinematicBicycle(track, N = 150)
+    model = KinematicBicycle(track, N = 200)
     ego_history, ego_sim_state, egost_list, = run_pid_warmstart(track, model, t=0.0)
-    print('state:', ego_sim_state)
-    # ##example
-    # initial_state = np.array([0.0, 0.0, 0.0, 0.0])  # Example initial state: [s, ey, epsi, v]
-    # initial_control = np.array([1.0, 0.0]) 
-    # ds=track.track_length / 150
-    # print(ds)
-    # print(track.track_length)
-    # next_state= model.f_d_rk4(initial_state, initial_control, ds)
-    # print("Initial state:", initial_state)
-    # print("Next state:", next_state)
-    ###
+
     mpcc_ego_controller = Optimize(model, track, opt_params)
     mpcc_ego_controller.set_warm_start(*ego_history)
 
