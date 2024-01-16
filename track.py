@@ -26,7 +26,7 @@ class Track():
         self.y = center[:,1]
         self.v = center[:,2]
         self.curv = calc_curv(center)
-
+        print("cu", len(self.curv), self.curv)
         self.get_track_info() # compute s, psi, length
 
         fined_inner = interpolate(inner, 0.1)
@@ -43,30 +43,59 @@ class Track():
         self.s = np.cumsum(ds)
         self.track_length = np.sum(ds)
 
-    
-    def get_curvature_casadi_fn(self):
-        sym_s = ca.SX.sym('s', 1)
+    def get_curvature_steps(self, N):
+        # s 위치에 대한 스텝 생성
+        s_steps = np.linspace(0, self.track_length, N)
+        
+        curvature_steps = []
+        for s in s_steps:
+            # s 위치에 해당하는 인덱스 찾기
+            index = np.argmin(np.abs(self.s - s))
+            #x, y = self.x[index], self.y[index]
+            
+            # 해당 위치의 곡률 계산
+            curvature = self.curv[index]
+            curvature_steps.append((s, curvature))
 
-        # Makes sure s is within [0, track_length]
-        sym_s_bar = ca.fmod(ca.fmod(sym_s, self.track_length) + self.track_length, self.track_length)
-        pw_const_curvature = ca.pw_const(sym_s_bar, self.s[1:-1], self.curv[1:])
-        return ca.Function('track_curvature', [sym_s], [pw_const_curvature])
+        return curvature_steps
     
-    def get_left_bd_casadi_fn(self):
-        sym_s = ca.SX.sym('s', 1)
-
-        # Makes sure s is within [0, track_length]
-        sym_s_bar = ca.fmod(ca.fmod(sym_s, self.track_length) + self.track_length, self.track_length)
-        pw_const_left_bd = ca.pw_const(sym_s_bar, self.s[1:-1], self.left_bd[1:])
-        return ca.Function('track_curvature', [sym_s], [pw_const_left_bd])
+    def find_nearest_point(self, x, y,):
+        min_dist = np.inf
+        nearest_index = -1 
+        for i in range(len(self.x)):
+            dist = np.sqrt((self.x[i]-x)**2 + (self.y[i]-y)**2)
+            if dist < min_dist:
+                min_dist = dist
+                nearest_index = i
+        return nearest_index
     
-    def get_right_bd_casadi_fn(self):
-        sym_s = ca.SX.sym('s', 1)
+    def get_curvature_at_position(self, x, y):
+        index = self.find_nearest_point(x,y)
+        return self.curv[index] if index != -1 else 0
+    
+    # def get_curvature_casadi_fn(self):
+    #     sym_s = ca.SX.sym('s', 1)
 
-        # Makes sure s is within [0, track_length]
-        sym_s_bar = ca.fmod(ca.fmod(sym_s, self.track_length) + self.track_length, self.track_length)
-        pw_const_right_bd = ca.pw_const(sym_s_bar, self.s[1:-1], self.right_bd[1:])
-        return ca.Function('track_curvature', [sym_s], [pw_const_right_bd])
+    #     # Makes sure s is within [0, track_length]
+    #     sym_s_bar = ca.fmod(ca.fmod(sym_s, self.track_length) + self.track_length, self.track_length)
+    #     pw_const_curvature = ca.pw_const(sym_s_bar, self.s[1:-1], self.curv[1:])
+    #     return ca.Function('track_curvature', [sym_s], [pw_const_curvature])
+    
+    # def get_left_bd_casadi_fn(self):
+    #     sym_s = ca.SX.sym('s', 1)
+
+    #     # Makes sure s is within [0, track_length]
+    #     sym_s_bar = ca.fmod(ca.fmod(sym_s, self.track_length) + self.track_length, self.track_length)
+    #     pw_const_left_bd = ca.pw_const(sym_s_bar, self.s[1:-1], self.left_bd[1:])
+    #     return ca.Function('track_curvature', [sym_s], [pw_const_left_bd])
+    
+    # def get_right_bd_casadi_fn(self):
+    #     sym_s = ca.SX.sym('s', 1)
+
+    #     # Makes sure s is within [0, track_length]
+    #     sym_s_bar = ca.fmod(ca.fmod(sym_s, self.track_length) + self.track_length, self.track_length)
+    #     pw_const_right_bd = ca.pw_const(sym_s_bar, self.s[1:-1], self.right_bd[1:])
+    #     return ca.Function('track_curvature', [sym_s], [pw_const_right_bd])
 
 
 
