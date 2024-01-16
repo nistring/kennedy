@@ -25,39 +25,58 @@ center = np.loadtxt(center_dir, delimiter=",", dtype = float)
 inner = np.loadtxt(inner_dir, delimiter=",", dtype = float)
 outer = np.loadtxt(outer_dir, delimiter=",", dtype = float)
 
-Nsim = 1
+Nsim = 2
 for i in range(0,Nsim):
     # idx = np.random.randint(0,len(center))
     idx = 0
     new_center = center[idx:]
     new_center = np.concatenate((new_center,center[:idx]),axis=0)
     track = Track(new_center,inner,outer)
+    curvature_info = track.get_curvature_steps(N=200)
+    
     model = KinematicBicycle(track, N = 200)
     ego_history, ego_sim_state, egost_list, = run_pid_warmstart(track, model, t=0.0)
-
+    # print(ego_sim_state, ego_sim_state.shape[0])
+    if ego_sim_state.v <=0 : 
+        ego_sim_state.v =0.5
+        
+    if i>= 1:
+        ego_sim_state.v = speed[-1]
+        print(ego_sim_state.v)
     mpcc_ego_controller = Optimize(model, track, opt_params)
     mpcc_ego_controller.set_warm_start(*ego_history)
 
     q,u,states  = mpcc_ego_controller.solve_optimization(ego_sim_state)
-
-    if q[-1,0] >= track.track_length:
-        idx_s = np.where(q[:,0] >= track.track_length)[0][0]
+    print(states)
+    optimized_s_values = q[:, 0]
+    
+    if optimized_s_values[-1] >= track.track_length:
+        idx_s = np.where(optimized_s_values >= track.track_length)[0][0]
     else:
         idx_s = -1
-
-    if q[-1,0] >= track.track_length*2:
-        idx_s2 = np.where(q[:,0] >= track.track_length*2)[0][0]
+        
+    if optimized_s_values[-1] >= track.track_length * 2:
+        idx_s2 = np.where(optimized_s_values >= track.track_length * 2)[0][0]
     else:
         idx_s2 = -1
+    # if q[-1,0] >= track.track_length:
+    #     idx_s = np.where(q[:,0] >= track.track_length)[0][0]
+    # else:
+    #     idx_s = -1
+
+    # if q[-1,0] >= track.track_length*2:
+    #     idx_s2 = np.where(q[:,0] >= track.track_length*2)[0][0]
+    # else:
+    #     idx_s2 = -1
 
     points = states[:idx_s,:2].reshape(-1, 1, 2)
-    speed = q[:idx_s,3]
+    speed = q[:idx_s,2]
 
     ## Save the optimized trajectory
     traj = np.zeros((len(speed),6))
-    traj[:,:2] = states[:idx_s,:2]
-    traj[:,2] = states[:idx_s,2]
-    traj[:,3] = q[:idx_s,3]
+    traj[:,0] = optimized_s_values[:idx_s]
+    traj[:,1:3] = states[:idx_s,:2]
+    traj[:,3] = q[:idx_s,2]
     traj[:,4:] = u[:idx_s]
 
     # np.savetxt('./data/optimized_traj'+str(i)+'.txt',traj, delimiter=",")
@@ -77,7 +96,24 @@ for i in range(0,Nsim):
     line = ax.add_collection(lc)
     fig.colorbar(line, ax=ax)
 
+    # print(q,states)
+    # v_value=q[:,3:].flatten()
+    # v_value = np.where(v_value==0,np.inf, v_value)
+        
+    # start_s = q[1,0]
+    # print("start",start_s)
+    # end_s= track.track_length
+    # print("end", end_s)
+    # step_s = end_s / model.N
+    # print("Step,", step_s)
+    # s_values = np.arange(start_s,end_s,step_s)
+    # if s_values[-1] != end_s:
+    #     s_values = np.append(s_values,end_s)
 
+    # print("v_value shape:", v_value.shape)
+    # print("s_values shape:", s_values.shape)
+    # opt_t = np.trapz(1/v_value, s_values)
+    # print("opt",opt_t)
     # points2 = states[idx_s:idx_s2,:2].reshape(-1, 1, 2)
     # speed2 = q[idx_s:idx_s2,3]
 

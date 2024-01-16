@@ -21,12 +21,12 @@ class Track():
         self.inner = inner
         self.outer = outer
         self.center = center
-        
+        #print( "size:", len(self.inner), len(self.outer), len(self.center))
         self.x = center[:,0]
         self.y = center[:,1]
         self.v = center[:,2]
         self.curv = calc_curv(center)
-        print("cu", len(self.curv), self.curv)
+        
         self.get_track_info() # compute s, psi, length
 
         fined_inner = interpolate(inner, 0.1)

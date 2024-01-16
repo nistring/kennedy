@@ -10,7 +10,7 @@ import matplotlib.pyplot as plt
 
 @dataclass
 class ModelParams():
-    n: int = field(default=4) # dimension state space
+    n: int = field(default=3) # dimension state space
     d: int = field(default=2) # dimension input space
 
     N: int = field(default=50)
@@ -24,12 +24,12 @@ class ModelParams():
     R_delta: float = field(default=0.01)
 
     # named constraint
-    s_max: float = field(default=np.inf)
-    s_min: float = field(default=-np.inf)
+    #s_max: float = field(default=np.inf)
+    #s_min: float = field(default=-np.inf)
     ey_max: float = field(default=np.inf)
     ey_min: float = field(default=-np.inf)
-    e_psi_max: float = field(default=np.pi)
-    e_psi_min: float = field(default=-np.pi)
+    e_psi_max: float = field(default=np.pi/2.1)
+    e_psi_min: float = field(default=-np.pi/2.1)
     v_max: float = field(default=np.inf)
     v_min: float = field(default=-np.inf)
 
@@ -72,12 +72,12 @@ class ModelParams():
         self.vectorize_constraints()
 
     def vectorize_constraints(self):
-        self.state_ub = np.array([self.s_max,
+        self.state_ub = np.array([
                                   self.ey_max,
                                   self.e_psi_max,
                                   self.v_max])
 
-        self.state_lb = np.array([self.s_min,
+        self.state_lb = np.array([
                                   self.ey_min,
                                   self.e_psi_min,
                                   self.v_min])
@@ -104,8 +104,8 @@ opt_params = ModelParams(
     R_delta= 0.5,
 
     
-    v_max= 8.0,
-    v_min= 0.0,
+    v_max= 5.5,
+    v_min= 0.5,
     u_a_min= -3,
     u_a_max= 3,
     
@@ -129,15 +129,17 @@ class Optimize():
         # Track Params
         self.track = track
         self.track_length = track.track_length
+        self.N = dynamics.N
 
+        curv_info = track.get_curvature_steps(self.N)
+        self.s_values, self.curv_values = zip(*curv_info)
         # Dynamics Params
         self.dynamics = dynamics
         self.lencar = dynamics.L  
 
         self.Nx = dynamics.n_q # number of states
         self.Nu = dynamics.n_u # number of inputs
-        self.N = dynamics.N
-
+        
 
         # optimization params
         self.control_params = control_params
@@ -182,29 +184,31 @@ class Optimize():
         self.const = []
 
     def solve_optimization(self, state):
-
+        
         x0, _ = self.dynamics.state2qu(state)
-
+        print(x0)
         ## Cost
         # https://ieeexplore.ieee.org/document/9340640 (7)
         ds = self.track_length / (self.N - 1)
+        print("tracklength,ds", self.track_length,ds)
         v = self.X[3::self.Nx]
         v = (v[1:] + v[:-1]) / 2
         for i in range(v.shape[0]):
-            self.cost += (ds / (v[i] + 1e-6)) * self.Qs
+            self.cost += (ds / (v[i] + 1e-12)) * self.Qs
         
-        for t in range(self.N):
-            self.cost += self.X[self.Nx*t+1]*self.Qey*self.X[self.Nx*t+1]
-            self.cost += self.X[self.Nx*t+2]*self.Qepsi*self.X[self.Nx*t+2]
+        # for t in range(self.N):
+        #     self.cost += self.X[self.Nx*t+1]*self.Qey*self.X[self.Nx*t+1]
+        #     self.cost += self.X[self.Nx*t+2]*self.Qepsi*self.X[self.Nx*t+2]
 
         ## Constraint for dynamics
         for t in range(self.N):
+            
             current_x = self.X[self.Nx*t:self.Nx*(t+1)]
             current_u = self.U[self.Nu*t:self.Nu*(t+1)]
             next_x = self.X[self.Nx*(t+1):self.Nx*(t+2)]
-
+            
             # x(n+1) = x(n) + f(x, u)/v * ds
-            self.const = ca.vertcat(self.const, next_x - self.dynamics.fd(current_x, current_u))
+            self.const = ca.vertcat(self.const, next_x - self.dynamics.f_d_rk4(current_x, current_u,ds))
             # x(n, 0) = s(n)
             self.const = ca.vertcat(self.const, self.track_length * t / self.N - current_x[0])
         # x(N, 0) = s(N)
@@ -244,8 +248,9 @@ class Optimize():
         sol = self.solver(x0=x_init, lbx = self.lbx, ubx=self.ubx, lbg=self.lbg_dyanmics,ubg=self.ubg_dyanmics)
 
         x = sol['x']
+        print(x)
         g = sol['g']
-
+        print("opt", x[0])
         idx = (self.N+1)*self.Nx
         for i in range(0,self.N):
             self.u_pred[i, 0] = x[idx+self.Nu*i].__float__()
@@ -255,7 +260,7 @@ class Optimize():
             self.x_pred[i, 0] = x[self.Nx*i].__float__()
             self.x_pred[i, 1] = x[self.Nx*i + 1].__float__()
             self.x_pred[i, 2] = x[self.Nx*i + 2].__float__()
-            self.x_pred[i, 3] = x[self.Nx*i + 3].__float__()
+            #self.x_pred[i, 3] = x[self.Nx*i + 3].__float__()
 
         # for i in range(0,self.N-1):
         #     s_next = x[1+self.Nx*(i+1)].__float__()
