@@ -59,7 +59,7 @@ class KinematicBicycle():
             u = [a, delta] longitudinal acceleration, steering angle'''
 
         # Number of states and input
-        self.n_q = 3 #ey,epsi,v
+        self.n_q = 4 #ey,epsi,v
         self.n_u = 2 #a,delta
 
         # Model Prameter
@@ -67,7 +67,7 @@ class KinematicBicycle():
         self.L_f = 0.17 #wheel_dist_front
         self.L_r = 0.17 #wheel_dist_rear
 
-        
+        self.sym_s = ca.SX.sym('s')
         self.sym_ey = ca.SX.sym('ey')
         self.sym_epsi = ca.SX.sym('epsi')
         self.sym_v = ca.SX.sym('v')
@@ -98,7 +98,7 @@ class KinematicBicycle():
     
     
     def update_model(self):
-        self.current_s_index = (self.current_s_index + 1) % len(self.s_values)
+        self.current_s_index = int(self.vehicle_state.s / self.ds) % len(self.s_values)
         self.current_s = self.s_values[self.current_s_index]
         self.current_curvature = self.curv_values[self.current_s_index]
         self.sym_c = ca.SX(self.current_curvature)
@@ -110,7 +110,7 @@ class KinematicBicycle():
         # self.sym_depsi = self.sym_v*ca.tan(self.sym_u_s)/(self.L) - self.sym_ds*self.sym_c
         # self.sym_dv = self.sym_u_a - self.sym_v*self.sym_c
         
-        ds_dt = self.sym_v * ca.cos(self.sym_epsi) + 1e-9 / (1 - self.sym_ey * self.sym_c)
+        ds_dt = self.sym_v * ca.cos(self.sym_epsi) + 1e-3 / (1 - self.sym_ey * self.sym_c)
         
         # State derivatives with respect to S
         self.sym_ds = 1
@@ -118,9 +118,9 @@ class KinematicBicycle():
         self.sym_depsi = (self.sym_v * ca.tan(self.sym_u_s) / self.L - self.sym_ds * self.sym_c) / ds_dt
         self.sym_dv = (self.sym_u_a - self.sym_v * self.sym_c) / ds_dt
         # state and state derivative functions
-        self.sym_q = ca.vertcat(self.sym_ey, self.sym_epsi, self.sym_v)
+        self.sym_q = ca.vertcat(self.sym_s, self.sym_ey, self.sym_epsi, self.sym_v)
         self.sym_u = ca.vertcat(self.sym_u_a, self.sym_u_s)
-        self.sym_dq = ca.vertcat(self.sym_dey, self.sym_depsi, self.sym_dv)
+        self.sym_dq = ca.vertcat(self.sym_ds, self.sym_dey, self.sym_depsi, self.sym_dv)
 
         self.precompute_model()
 
@@ -219,10 +219,10 @@ class KinematicBicycle():
         q, u = self.state2qu(state)  
 
         #Update time
-        t = state.t - self.t0
-        tf = state.t + self.t0
-        state.t = tf + self.t0
-
+        # t = state.t - self.t0
+        # tf = state.t + self.t0
+        # state.t = tf + self.t0
+        self.update_model()
         # q_new = self.update(q,u)
         q_new = np.array(self.f_d_rk4(q, u, self.dt))[:,0]
 
@@ -232,9 +232,10 @@ class KinematicBicycle():
 
     def qu2state(self, state: VehicleState, q: np.ndarray = None, u: np.ndarray = None):
         if q is not None:
-            state.ey = q[0]
-            state.epsi = q[1]
-            state.v = q[2]
+            state.s = q[0]
+            state.ey = q[1]
+            state.epsi = q[2]
+            state.v = q[3]
 
         if u is not None:
             state.a = u[0]
@@ -248,6 +249,6 @@ class KinematicBicycle():
 
 
     def state2qu(self, state):
-        q = np.array([state.ey, state.epsi, state.v])
+        q = np.array([state.s, state.ey, state.epsi, state.v])
         u = np.array([state.a, state.delta])
         return q, u

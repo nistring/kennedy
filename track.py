@@ -102,7 +102,9 @@ class Track():
     
     
     def local_to_global(self, cl_coord):
-
+        curv_info = self.get_curvature_steps(N=200)
+        s_value, _ = zip(*curv_info)
+        
         s = cl_coord[0]
         while s < 0: s += self.track_length
         while s >= self.track_length: s -= self.track_length

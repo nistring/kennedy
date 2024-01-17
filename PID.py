@@ -313,7 +313,7 @@ def run_pid_warmstart(track, model, t=0, approx=True):
 
         n_iter += 1
         t += dt
-        s_prev = q[2]
+        s_prev = q[3]
         # print(n_iter)
         
 

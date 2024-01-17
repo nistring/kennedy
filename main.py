@@ -47,38 +47,38 @@ for i in range(0,Nsim):
     mpcc_ego_controller.set_warm_start(*ego_history)
 
     q,u,states  = mpcc_ego_controller.solve_optimization(ego_sim_state)
-    print(states)
+    #print(states)
     optimized_s_values = q[:, 0]
     
-    if optimized_s_values[-1] >= track.track_length:
-        idx_s = np.where(optimized_s_values >= track.track_length)[0][0]
-    else:
-        idx_s = -1
-        
-    if optimized_s_values[-1] >= track.track_length * 2:
-        idx_s2 = np.where(optimized_s_values >= track.track_length * 2)[0][0]
-    else:
-        idx_s2 = -1
-    # if q[-1,0] >= track.track_length:
-    #     idx_s = np.where(q[:,0] >= track.track_length)[0][0]
+    # if optimized_s_values[-1] >= track.track_length:
+    #     idx_s = np.where(optimized_s_values >= track.track_length)[0][0]
     # else:
     #     idx_s = -1
-
-    # if q[-1,0] >= track.track_length*2:
-    #     idx_s2 = np.where(q[:,0] >= track.track_length*2)[0][0]
+        
+    # if optimized_s_values[-1] >= track.track_length * 2:
+    #     idx_s2 = np.where(optimized_s_values >= track.track_length * 2)[0][0]
     # else:
     #     idx_s2 = -1
+    if q[-1,0] >= track.track_length:
+        idx_s = np.where(q[:,0] >= track.track_length)[0][0]
+    else:
+        idx_s = -1
+
+    if q[-1,0] >= track.track_length*2:
+        idx_s2 = np.where(q[:,0] >= track.track_length*2)[0][0]
+    else:
+        idx_s2 = -1
 
     points = states[:idx_s,:2].reshape(-1, 1, 2)
-    speed = q[:idx_s,2]
+    speed = q[:idx_s,3]
 
     ## Save the optimized trajectory
     traj = np.zeros((len(speed),6))
-    traj[:,0] = optimized_s_values[:idx_s]
-    traj[:,1:3] = states[:idx_s,:2]
-    traj[:,3] = q[:idx_s,2]
+    traj[:,:2] = states[:idx_s,:2]
+    traj[:,2] = states[:idx_s,2]
+    traj[:,3] = q[:idx_s,3]
     traj[:,4:] = u[:idx_s]
-
+    
     # np.savetxt('./data/optimized_traj'+str(i)+'.txt',traj, delimiter=",")
     np.savetxt('./data/optimized_traj.txt',traj, delimiter=",")
 
